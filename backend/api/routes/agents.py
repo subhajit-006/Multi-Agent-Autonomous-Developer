@@ -2,7 +2,6 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 
-
 from core.memory import SharedMemory
 from services.agent_service import AgentService
 
@@ -16,6 +15,15 @@ class AgentRequest(BaseModel):
     memory: Dict[str, Any] = Field(default_factory=dict)
     task: Optional[str] = None
     scope: Optional[str] = None
+
+
+# 🔥 STREAM DEBUG FUNCTION
+async def debug_stream(agent: str, message: str):
+    """
+    Streams agent thoughts to console.
+    Later this can be wired to SSE/WebSocket.
+    """
+    print(f"[{agent}] {message}", flush=True)
 
 
 @router.post("/run")
@@ -37,11 +45,19 @@ async def run_agent(req: AgentRequest):
     if req.scope:
         memory.write("scope", req.scope)
 
-    # 🚀 Execute agent
-    result = await agent_service.run_agent(req.agent, memory)
+    # 🚀 Execute agent WITH STREAMING
+    try:
+        result = await agent_service.run_agent(
+            req.agent,
+            memory,
+            stream_callback=debug_stream   # 🔥 THIS IS THE FIX
+        )
+    except TypeError:
+        # fallback if some agents don't support stream_callback yet
+        result = await agent_service.run_agent(req.agent, memory)
 
     # 🛑 Update final status
-    if result["status"] == "failed":
+    if result.get("status") == "failed":
         memory.set_status("failed")
     else:
         memory.set_status("completed")

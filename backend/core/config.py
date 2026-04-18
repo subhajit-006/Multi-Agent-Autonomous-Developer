@@ -1,9 +1,12 @@
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+DEVELOPER_GOOGLE_API_KEY = os.getenv("DEVELOPER_GOOGLE_API_KEY", "")
+DEBUGGER_GOOGLE_API_KEY = os.getenv("DEBUGGER_GOOGLE_API_KEY", "")
+TESTER_GOOGLE_API_KEY = os.getenv("TESTER_GOOGLE_API_KEY", "")
+DEVELOPER_GROQ_API_KEY = os.getenv("DEVELOPER_GROQ_API_KEY")
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
 

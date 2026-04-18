@@ -1,60 +1,158 @@
 import json
-import os
-from openai import AsyncOpenAI
-from core.config import AGENT_MODELS
+import re
+import asyncio
 
-async def run_architect(memory) -> dict:
-    client = AsyncOpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ.get("OPENROUTER_API_KEY")
-    )
-    plan = memory.read("plan")
-    
-    if not plan:
-        raise ValueError("Architect requires a valid plan from the Planner agent.")
+from core.llm import get_llm
 
-    system_prompt = "You are a software architect. Given a development plan, design a clean, minimal system architecture."
-    
-    user_content = f"Development Plan:\n{json.dumps(plan, indent=2)}\n\nConstraint: Tech stack must be Next.js, FastAPI, and SQLite (or Firebase)."
 
-    response = await client.chat.completions.create(
-        model=AGENT_MODELS.get('architect'),
-        max_tokens=4000,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content}
-        ],
-        tools=[{
-            "type": "function",
-            "function": {
-                "name": "submit_architecture",
-                "description": "Submit the finalized architecture document.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "tech_stack": {
-                            "type": "object",
-                            "properties": {
-                                "frontend": {"type": "string"},
-                                "backend": {"type": "string"},
-                                "database": {"type": "string"}
-                            },
-                            "required": ["frontend", "backend", "database"]
-                        },
-                        "file_structure": {"type": "array", "items": {"type": "string"}},
-                        "api_endpoints": {"type": "array", "items": {"type": "string"}},
-                        "notes": {"type": "string"}
-                    },
-                    "required": ["tech_stack", "file_structure", "api_endpoints", "notes"]
+REQUIRED_KEYS = ["tech_stack", "file_structure", "api_endpoints", "notes"]
+
+
+def validate_architecture(data: dict) -> dict:
+    if not isinstance(data, dict):
+        return {}
+
+    validated = {}
+
+    for key in REQUIRED_KEYS:
+        if key not in data:
+            if key in ["file_structure", "api_endpoints"]:
+                validated[key] = []
+            elif key == "tech_stack":
+                validated[key] = {
+                    "frontend": "",
+                    "backend": "",
+                    "database": ""
                 }
-            }
-        }],
-        tool_choice={"type": "function", "function": {"name": "submit_architecture"}}
-    )
+            else:
+                validated[key] = ""
+        else:
+            validated[key] = data[key]
 
-    if response.choices[0].message.tool_calls:
-        for tool_call in response.choices[0].message.tool_calls:
-            if tool_call.function.name == "submit_architecture":
-                return json.loads(tool_call.function.arguments)
+    # enforce structure
+    if not isinstance(validated["file_structure"], list):
+        validated["file_structure"] = []
 
-    raise ValueError("Architect did not return the expected tool use data.")
+    if not isinstance(validated["api_endpoints"], list):
+        validated["api_endpoints"] = []
+
+    if not isinstance(validated["tech_stack"], dict):
+        validated["tech_stack"] = {
+            "frontend": "",
+            "backend": "",
+            "database": ""
+        }
+
+    return validated
+
+
+async def run_architect(memory, stream_callback=None) -> dict:
+    llm = get_llm("architect", streaming=True)
+
+    plan = memory.read("plan")
+
+    if not plan:
+        raise ValueError("Architect requires planner output.")
+
+    # =========================================
+    # 🧠 PHASE 1 — THINKING
+    # =========================================
+
+    thinking_prompt = f"""
+You are a senior software architect.
+
+Analyze this plan and think step-by-step.
+
+Return ONLY JSON:
+
+{{
+  "system_design": "...",
+  "components": ["...", "..."],
+  "data_flow": "..."
+}}
+
+Plan:
+{json.dumps(plan, indent=2)}
+"""
+
+    thinking_response = ""
+
+    async for chunk in llm.astream(thinking_prompt):
+        token = chunk.content or ""
+        thinking_response += token
+
+        if stream_callback:
+            await stream_callback("architect_thinking", token)
+
+    thinking_clean = re.sub(r"```(?:json)?", "", thinking_response).strip().rstrip("```")
+
+    try:
+        thinking_json = json.loads(thinking_clean)
+    except:
+        match = re.search(r'\{[\s\S]*\}', thinking_clean)
+        thinking_json = json.loads(match.group()) if match else {}
+
+    memory.write("architect_thinking", thinking_json)
+
+    await asyncio.sleep(0.3)
+
+    # =========================================
+    # 🧠 PHASE 2 — FINAL ARCHITECTURE
+    # =========================================
+
+    architecture_prompt = f"""
+Based on this reasoning:
+
+{json.dumps(thinking_json, indent=2)}
+
+Generate SYSTEM ARCHITECTURE.
+
+STRICT RULES:
+- Use Next.js, FastAPI, SQLite
+- Return ONLY JSON
+- No markdown
+- No explanation
+- No extra keys
+
+FORMAT:
+
+{{
+  "tech_stack": {{
+    "frontend": "Next.js",
+    "backend": "FastAPI",
+    "database": "SQLite"
+  }},
+  "file_structure": ["path/file"],
+  "api_endpoints": ["METHOD /route"],
+  "notes": "..."
+}}
+
+IMPORTANT:
+- file_structure must be COMPLETE
+- include frontend + backend
+- realistic production structure
+"""
+
+    final_response = ""
+
+    async for chunk in llm.astream(architecture_prompt):
+        token = chunk.content or ""
+        final_response += token
+
+        if stream_callback:
+            await stream_callback("architect_output", token)
+
+    final_clean = re.sub(r"```(?:json)?", "", final_response).strip().rstrip("```")
+
+    try:
+        parsed = json.loads(final_clean)
+    except:
+        match = re.search(r'\{[\s\S]*\}', final_clean)
+        parsed = json.loads(match.group()) if match else {}
+
+    validated = validate_architecture(parsed)
+
+    # 🔥 Save architecture
+    memory.write("architecture", validated)
+
+    return validated
