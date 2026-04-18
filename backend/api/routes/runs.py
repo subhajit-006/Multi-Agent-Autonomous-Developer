@@ -40,7 +40,7 @@ async def get_run_history(run_id: str) -> Dict[str, Any]:
     for step, memory_json, created_at in history:
         formatted.append({
             "step": step,
-            "memory": memory_json,  # still JSON string (safe for now)
+            "memory": memory_json,  
             "timestamp": created_at
         })
 

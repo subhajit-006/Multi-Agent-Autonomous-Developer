@@ -151,3 +151,39 @@ def get_memory_history(run_id: str):
         return cursor.fetchall()
     finally:
         conn.close()
+
+
+def get_latest_memory_snapshot(run_id: str):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT step, memory_json, created_at
+            FROM memory_snapshots
+            WHERE run_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (run_id,)
+        )
+
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        step, memory_json, created_at = row
+        parsed_memory = {}
+        try:
+            parsed_memory = json.loads(memory_json) if memory_json else {}
+        except json.JSONDecodeError:
+            parsed_memory = {}
+
+        return {
+            "step": step,
+            "memory": parsed_memory,
+            "created_at": created_at,
+        }
+    finally:
+        conn.close()

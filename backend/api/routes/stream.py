@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 
-from core.db import get_run_status
+from core.db import get_run_status, get_latest_memory_snapshot
 
 router = APIRouter()
 
@@ -12,7 +12,15 @@ router = APIRouter()
 async def event_generator(run_id: str):
     last_step = None
     last_status = None
+    last_debug_marker = None
     last_emit = time.monotonic()
+
+    def _trim(value: str, limit: int = 240):
+        if not value:
+            return value
+        if len(value) <= limit:
+            return value
+        return value[:limit] + "..."
 
     # Hint reconnect delay for EventSource clients.
     yield "retry: 2000\n\n"
@@ -37,6 +45,36 @@ async def event_generator(run_id: str):
                 last_step = step
                 last_status = status
                 last_emit = time.monotonic()
+
+            latest_snapshot = get_latest_memory_snapshot(run_id)
+            if latest_snapshot:
+                memory = latest_snapshot.get("memory") or {}
+                developer_state = memory.get("developer_state")
+                developer_attempt = memory.get("developer_attempt")
+                developer_error = memory.get("developer_last_error")
+                developer_traceback = memory.get("developer_last_traceback")
+
+                marker = f"{latest_snapshot.get('created_at')}|{developer_state}|{developer_attempt}|{developer_error}"
+                should_emit_debug = (
+                    developer_state is not None
+                    or (step is not None and str(step).startswith("developer"))
+                    or (latest_snapshot.get("step") or "").startswith("developer")
+                )
+
+                if should_emit_debug and marker != last_debug_marker:
+                    payload = {
+                        "run_id": run_id,
+                        "current_step": step,
+                        "snapshot_step": latest_snapshot.get("step"),
+                        "developer_state": developer_state,
+                        "developer_attempt": developer_attempt,
+                        "developer_last_error": _trim(developer_error),
+                        "developer_last_traceback": _trim(developer_traceback, 600),
+                        "snapshot_timestamp": latest_snapshot.get("created_at"),
+                    }
+                    yield f"event: developer_debug\ndata: {json.dumps(payload)}\n\n"
+                    last_debug_marker = marker
+                    last_emit = time.monotonic()
 
             if status in ["completed", "failed"]:
                 yield (

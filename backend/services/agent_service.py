@@ -4,6 +4,7 @@ import traceback
 from typing import Dict, Any, Callable
 
 from core.memory import SharedMemory
+from core.db import upsert_run, save_memory_snapshot
 
 from agents.planner import run_planner
 from agents.architect import run_architect
@@ -50,6 +51,8 @@ class AgentService:
         last_error = None
         last_traceback = None
 
+        logger.info("Agent '%s' started (run_id=%s, max_retries=%s)", agent_name, run_id, max_retries)
+
         for attempt in range(1, max_retries + 1):
             try:
                 # 🧠 Attach retry context
@@ -60,10 +63,33 @@ class AgentService:
 
                 memory.write("last_active_agent", agent_name)
 
+                if agent_name == "developer":
+                    memory.write("developer_attempt", attempt)
+                    memory.write("developer_state", "running")
+                    upsert_run(run_id, "running", f"developer:attempt:{attempt}")
+                    logger.info("Developer attempt %s/%s started (run_id=%s)", attempt, max_retries, run_id)
+
                 result = await agent_func(memory)
 
                 # 📦 Store result
                 memory.write(output_key, result)
+
+                if agent_name == "developer":
+                    memory.write("developer_state", "completed")
+                    logger.info(
+                        "Developer completed successfully on attempt %s/%s (run_id=%s)",
+                        attempt,
+                        max_retries,
+                        run_id,
+                    )
+
+                logger.info(
+                    "Agent '%s' succeeded on attempt %s/%s (run_id=%s)",
+                    agent_name,
+                    attempt,
+                    max_retries,
+                    run_id,
+                )
 
                 return {
                     "run_id": run_id,
@@ -90,9 +116,23 @@ class AgentService:
                 # 🧾 Log failure into memory
                 memory.write(f"{agent_name}_last_error", last_error)
                 memory.write(f"{agent_name}_last_traceback", last_traceback)
+                save_memory_snapshot(run_id, f"{agent_name}_attempt_{attempt}_error", memory.dump())
+
+                if agent_name == "developer":
+                    state = "retrying" if attempt < max_retries else "failed"
+                    memory.write("developer_state", state)
+                    upsert_run(run_id, "running", f"developer:{state}:{attempt}")
+                    logger.warning(
+                        "Developer attempt %s/%s failed (run_id=%s): %s",
+                        attempt,
+                        max_retries,
+                        run_id,
+                        last_error,
+                    )
 
         # Final failure after retries
         memory.write(output_key, None)
+        logger.error("Agent '%s' failed after %s attempts (run_id=%s)", agent_name, max_retries, run_id)
 
         return {
             "run_id": run_id,
