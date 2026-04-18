@@ -1,0 +1,280 @@
+{
+  "name": "MAAD Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "maad-pipeline",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e1f1a1a1-1234-4a4a-9b9b-1a1a1a1a1a1a",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/agents/planner",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task\": \"{{ $json.body.task }}\",\n  \"scope\": \"{{ $json.body.scope }}\"\n}"
+      },
+      "id": "c2a2b2b2-2345-4b4b-8c8c-2b2b2b2b2b2b",
+      "name": "Call Planner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        300,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/agents/architect",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task\": \"{{ $('Webhook').item.json.body.task }}\",\n  \"scope\": \"{{ $('Webhook').item.json.body.scope }}\",\n  \"plan\": {{ JSON.stringify($json) }}\n}"
+      },
+      "id": "d3c3d3d3-3456-4c4c-7d7d-3c3c3c3c3c3c",
+      "name": "Call Architect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        500,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/agents/developer",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task\": \"{{ $('Webhook').item.json.body.task }}\",\n  \"scope\": \"{{ $('Webhook').item.json.body.scope }}\",\n  \"plan\": {{ JSON.stringify($('Call Planner').item.json) }},\n  \"architecture\": {{ JSON.stringify($json) }}\n}"
+      },
+      "id": "e4d4e4e4-4567-4d4d-6e6e-4d4d4d4d4d4d",
+      "name": "Call Developer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        700,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/agents/debugger",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"files\": {{ JSON.stringify($json.files) }}\n}"
+      },
+      "id": "f5e5f5f5-5678-4e4e-5f5f-5e5e5e5e5e5e",
+      "name": "Call Debugger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        900,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/agents/tester",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"files\": {{ JSON.stringify($json.corrected_files || $('Call Developer').item.json.files) }}\n}"
+      },
+      "id": "a6f6a6a6-6789-4f4f-4a4a-6f6f6f6f6f6f",
+      "name": "Call Tester",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const start = new Date($('Webhook').first().startTime);\nconst end = new Date();\nconst durationSeconds = (end - start) / 1000;\n\nconst planner = $('Call Planner').first().json || {};\nconst architect = $('Call Architect').first().json || {};\nconst developer = $('Call Developer').first().json || {};\nconst debugger_res = $('Call Debugger').first().json || {};\nconst tester = $('Call Tester').first().json || {};\n\nconst finalFiles = developer.files || [];\nif (tester.test_file) {\n  finalFiles.push({\n     filename: 'tests/main.test.ts',\n     content: tester.test_file_content || tester.test_file\n  });\n}\n\nreturn {\n  status: 'success',\n  metadata: {\n    total_duration: durationSeconds,\n    agent_count: 5,\n    file_count: finalFiles.length\n  },\n  plan: planner,\n  architecture: architect,\n  debug_report: debugger_res,\n  files: finalFiles\n};"
+      },
+      "id": "b7g7b7b7-789a-4g4g-3b3b-7g7g7g7g7g7g",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  status: 'error',\n  message: 'An agent pipeline step failed',\n  error_details: $input.all()[0].json,\n  metadata: {\n    agent_count: 5\n  }\n};"
+      },
+      "id": "c8h8c8c8-89ab-4h4h-2c2c-8h8h8h8h8h8h",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "d9i9d9d9-9abc-4i4i-1d1d-9i9i9i9i9i9i",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Call Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Planner": {
+      "main": [
+        [
+          {
+            "node": "Call Architect",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Architect": {
+      "main": [
+        [
+          {
+            "node": "Call Developer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Developer": {
+      "main": [
+        [
+          {
+            "node": "Call Debugger",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Debugger": {
+      "main": [
+        [
+          {
+            "node": "Call Tester",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Tester": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Output": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

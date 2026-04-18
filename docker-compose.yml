@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # FastAPI Backend with N8N Integration
+  backend:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - ./sessions:/app/sessions
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5678}
+      # Per-Agent Models
+      - PLANNER_MODEL=${PLANNER_MODEL:-google/gemma-4-26b-a4b-it:free}
+      - ARCHITECT_MODEL=${ARCHITECT_MODEL:-meta-llama/llama-3-70b-instruct:free}
+      - DEVELOPER_MODEL=${DEVELOPER_MODEL:-google/gemma-4-26b-a4b-it:free}
+      - DEBUGGER_MODEL=${DEBUGGER_MODEL:-meta-llama/llama-3-8b-instruct:free}
+      - TESTER_MODEL=${TESTER_MODEL:-google/gemma-4-26b-a4b-it:free}
+    command: sh -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      - n8n
+    networks:
+      - maad-network
+
+  # N8N Workflow Orchestrator
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - DB_TYPE=sqlite
+      - N8N_USER_MANAGEMENT_DISABLED=true
+      - N8N_WEBHOOKS_URL=http://n8n:5678
+      - N8N_HOST=0.0.0.0
+      - GENERIC_TIMEZONE=${TIMEZONE:-UTC}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - maad-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:5678/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Frontend (Next.js)
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev"
+    environment:
+      - WATCHPACK_POLLING=true
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_N8N_URL=${NEXT_PUBLIC_N8N_URL:-http://localhost:5678}
+    depends_on:
+      - backend
+    networks:
+      - maad-network
+
+networks:
+  maad-network:
+    driver: bridge
+
+volumes:
+  n8n_data:
+
