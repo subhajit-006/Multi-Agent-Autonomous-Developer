@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import ALLOWED_ORIGINS
 from core.db import init_db
-from api.routes import agents, pipeline, session, health
+from api.routes import agents, pipeline, session, health, stream
 
 from api.routes import runs
 
@@ -29,3 +29,4 @@ app.include_router(pipeline.router)
 app.include_router(session.router)
 app.include_router(health.router)
 app.include_router(runs.router)
+app.include_router(stream.router)

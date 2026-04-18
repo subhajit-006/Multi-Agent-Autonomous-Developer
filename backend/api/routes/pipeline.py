@@ -3,9 +3,14 @@ from typing import Any, Dict, List, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+import asyncio
 
 from services.pipeline_service import PipelineService
 from services.agent_service import AGENT_REGISTRY
+
+# 🔥 NEW IMPORTS
+from core.memory import SharedMemory
+from core.db import upsert_run
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -21,7 +26,7 @@ class PipelineRequest(BaseModel):
     )
 
 
-# 🧠 Basic dependency validation (keeps chaos in check)
+# 🧠 Basic dependency validation
 def validate_flow(flow: List[str]):
 
     required_order = {
@@ -42,7 +47,7 @@ def validate_flow(flow: List[str]):
                 if dep not in seen:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Agent '{agent}' requires '{dep}' to run before it."
+                        detail=f"Agent '{agent}' requires '{dep}' before it."
                     )
 
         seen.add(agent)
@@ -51,20 +56,31 @@ def validate_flow(flow: List[str]):
 @router.post("/run")
 async def run_pipeline(req: PipelineRequest) -> Dict[str, Any]:
 
-    # 🚨 Validate flow before execution
+    # 🚨 Validate flow
     validate_flow(req.flow)
 
-    result = await pipeline_service.run_pipeline(
-        task=req.task,
-        scope=req.scope,
-        flow=req.flow,
+    # 🧠 CREATE MEMORY FIRST (THIS IS THE KEY FIX)
+    memory = SharedMemory()
+    memory.write("task", req.task)
+    memory.write("scope", req.scope)
+    memory.set_status("running")
+
+    run_id = memory.read("run_id")
+
+    # 🔥 Persist initial state
+    upsert_run(run_id, "running", "init")
+
+    # 🚀 Run pipeline in background (NON-BLOCKING)
+    asyncio.create_task(
+        pipeline_service.run_pipeline(
+            task=req.task,
+            scope=req.scope,
+            flow=req.flow,
+            memory=memory  
+        )
     )
 
     return {
-        "run_id": result.get("run_id"),
-        "status": result.get("status"),
-        "duration": result.get("total_time"),
-        "failed_step": result.get("failed_step"),
-        "results": result.get("results"),
-        "memory": result.get("memory"),
+        "run_id": run_id,
+        "status": "started"
     }
