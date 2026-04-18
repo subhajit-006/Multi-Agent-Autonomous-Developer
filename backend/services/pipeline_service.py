@@ -90,6 +90,8 @@ class PipelineService:
                                 "run_id": run_id,
                                 "status": "failed",
                                 "failed_step": "developer",
+                                "error": retry_result.get("error"),
+                                "traceback": retry_result.get("traceback"),
                                 "results": results,
                                 "memory": memory.dump(),
                                 "duration": round(time.time() - start_time, 2)
@@ -124,6 +126,8 @@ class PipelineService:
                     "run_id": run_id,
                     "status": "failed",
                     "failed_step": agent,
+                    "error": result.get("error"),
+                    "traceback": result.get("traceback"),
                     "results": results,
                     "memory": memory.dump(),
                     "duration": round(time.time() - start_time, 2)

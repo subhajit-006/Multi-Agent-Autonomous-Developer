@@ -1,12 +1,12 @@
 # MAAD (Multi-Agent Autonomous Developer) v2.0
 
-MAAD is an advanced AI orchestration system featuring **5 specialized agents** (Planner, Architect, Developer, Debugger, Tester) working in a transparent pipeline. **Now with N8N integration and per-agent model optimization**, you can configure different LLMs for each agent to maximize quality while controlling costs.
+MAAD is an advanced AI orchestration system featuring **5 specialized agents** (Planner, Architect, Developer, Debugger, Tester) working in a transparent pipeline. With per-agent model optimization, you can configure different LLMs for each agent to maximize quality while controlling costs.
 
 Transform plain-English product ideas into production-ready full-stack applications.
 
-![MAAD Demo Placeholder](https://via.placeholder.com/1200x600.png?text=MAAD+N8N+Orchestration)
+![MAAD Demo Placeholder](https://via.placeholder.com/1200x600.png?text=MAAD+Agent+Orchestration)
 
-## 🏗 System Architecture (N8N Integrated)
+## 🏗 System Architecture
 
 ```
                      ┌──────────────────────┐
@@ -17,8 +17,8 @@ Transform plain-English product ideas into production-ready full-stack applicati
                      [ Next.js Frontend ]
                                 │
          ┌──────────────────────▼──────────────────────┐
-         │          N8N ORCHESTRATOR                   │
-         │     (Webhook → Sequential Agent Calls)      │
+         │          FASTAPI ORCHESTRATOR               │
+         │      (Sequential Agent API Calls)           │
          └──────────────────────┬──────────────────────┘
                                 │
     ┌────────────┬──────────────┼──────────────┬───────────────┐
@@ -49,12 +49,11 @@ Each agent uses an optimized model for its specific task:
 | Debugger | Llama-3-8B | Review & fix | ⭐⭐⭐⭐ | ⚡⚡⚡⚡⚡ |
 | Tester | Gemma-4 | Generate tests | ⭐⭐⭐⭐ | ⚡⚡⚡⚡ |
 
-### 🔄 N8N Orchestration
-- **Visual Workflow Designer** - See and modify the pipeline in the UI
+### 🔄 Pipeline Orchestration
+- **Sequential Agent Flow** - Planner → Architect → Developer → Debugger → Tester
 - **Error Handling & Retries** - Built-in resilience for each agent
 - **Easy Extensibility** - Add agents or modify flow without code changes
-- **Real-time Monitoring** - Watch execution progress with N8N's dashboard
-- **Webhook Triggers** - Integrate with external systems
+- **Session Tracking** - Persist and inspect each stage output in the backend
 
 ### 💾 Session-Based State Management
 - **Persistent Storage** - All agent outputs saved in SQLite
@@ -92,18 +91,11 @@ docker-compose up -d
 Services will be available at:
 - 🖥️ **Frontend**: http://localhost:3000
 - 🔧 **FastAPI Backend**: http://localhost:8000
-- ⚙️ **N8N**: http://localhost:5678
 
-### 4️⃣ **Import N8N Workflow**
-1. Open http://localhost:5678 (N8N)
-2. Click **"+" → "Import from File"**
-3. Select `maad_n8n_workflow_v2.json`
-4. Click **"Activate"** to enable workflow
-
-### 5️⃣ **Test the Pipeline**
+### 4️⃣ **Test the Pipeline**
 ```bash
 # Using cURL
-curl -X POST http://localhost:5678/webhook/maad-pipeline-webhook \
+curl -X POST http://localhost:8000/pipeline/init \
   -H "Content-Type: application/json" \
   -d '{
     "task": "Build a todo app with Next.js",
@@ -115,8 +107,6 @@ curl -X POST http://localhost:5678/webhook/maad-pipeline-webhook \
 
 ## 📖 Documentation
 
-- **[N8N Setup Guide](./N8N_SETUP_GUIDE.md)** - Detailed setup & configuration
-- **[Architecture Reference](./N8N_ARCHITECTURE_REFERENCE.md)** - Data flow & API reference
 - **[Backend Details](./BACKEND_STRUCTURE.md)** - Python code structure
 
 ## ⚙️ Configuration
@@ -149,7 +139,6 @@ docker-compose up
 # Use PostgreSQL instead of SQLite
 # Deploy multiple FastAPI instances behind nginx/k8s
 # Add Redis for caching
-# See N8N_SETUP_GUIDE.md for details
 ```
 
 ## 🏃 Manual Development Setup
@@ -182,7 +171,7 @@ Typical execution timeline:
 ## 🛠 Tech Stack
 - **Frontend**: Next.js 14, Tailwind CSS, TypeScript
 - **Backend**: Python 3.11+, FastAPI, Pydantic, SQLite/PostgreSQL
-- **Orchestration**: N8N (self-hosted)
+- **Orchestration**: FastAPI service layer
 - **AI Models**: OpenRouter API (Gemma-4, Llama-3, Claude, GPT-4, etc.)
 - **Deployment**: Docker, Docker Compose
 
@@ -202,7 +191,7 @@ POST /pipeline/init
 GET /session/{session_id}
 ```
 
-### Individual Agent Endpoints (called by N8N)
+### Individual Agent Endpoints
 ```bash
 POST /agent/planner
 POST /agent/architect
@@ -211,20 +200,12 @@ POST /agent/debugger
 POST /agent/tester
 ```
 
-See [API Reference](./N8N_ARCHITECTURE_REFERENCE.md) for details.
-
 ## 🐛 Troubleshooting
 
 **Backend not responding?**
 ```bash
 docker-compose logs backend
 curl http://localhost:8000/health
-```
-
-**N8N workflow not running?**
-```bash
-docker-compose logs n8n
-# Re-import maad_n8n_workflow_v2.json
 ```
 
 **Model not found?**
@@ -238,14 +219,14 @@ curl -H "Authorization: Bearer $OPENROUTER_API_KEY" \
 
 1. **Single Instance** - Perfect for development (10 concurrent requests)
 2. **Horizontal Scaling** - Run multiple backends with load balancer + PostgreSQL
-3. **Advanced Workflows** - Use N8N's parallel execution for multiple agents
+3. **Advanced Workflows** - Use parallel execution for multiple agents
 4. **Caching** - Redis for planner output reuse
 5. **Monitoring** - ELK stack or Datadog integration
 
 ## 🗓️ Roadmap
 
 - [x] Per-agent model configuration
-- [x] N8N integration (v2.0)
+- [x] API-based orchestration
 - [x] Session-based state management
 - [ ] Parallel agent execution
 - [ ] Custom workflow templates
@@ -262,6 +243,6 @@ Contributions welcome! See CONTRIBUTING.md
 
 ---
 
-**Version**: 2.0.0 (N8N Integrated - 2026-04-18)  
+**Version**: 2.0.0 (2026-04-18)  
 **Status**: 🟢 Production Ready
 

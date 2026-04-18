@@ -21,13 +21,15 @@ class PipelineRequest(BaseModel):
     task: str = Field(..., description="Plain-English build request")
     scope: Literal["minimal", "standard", "full"] = "standard"
     flow: List[str] = Field(
-        default_factory=lambda: ["planner", "architect", "developer", "debugger", "tester"],
+        default_factory=lambda: ["planner", "architect", "developer"],
         description="Ordered agent execution list"
     )
 
 
 # 🧠 Basic dependency validation
 def validate_flow(flow: List[str]):
+
+    disabled_agents = {"debugger", "tester"}
 
     required_order = {
         "architect": ["planner"],
@@ -41,6 +43,9 @@ def validate_flow(flow: List[str]):
     for agent in flow:
         if agent not in AGENT_REGISTRY:
             raise HTTPException(status_code=400, detail=f"Invalid agent: {agent}")
+
+        if agent in disabled_agents:
+            raise HTTPException(status_code=400, detail=f"Agent '{agent}' is currently disabled")
 
         if agent in required_order:
             for dep in required_order[agent]:

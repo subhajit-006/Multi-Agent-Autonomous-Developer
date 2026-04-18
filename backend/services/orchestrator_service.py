@@ -1,9 +1,6 @@
 # services/orchestrator.py
 
-try:
-    from backend.services.pipeline_service import PipelineService
-except ModuleNotFoundError:
-    from services.pipeline_service import PipelineService
+from services.pipeline_service import PipelineService
 
 
 class Orchestrator:
@@ -17,8 +14,8 @@ class Orchestrator:
             "planner",
             "architect",
             "developer",
-            "debugger",
-            "tester"
+            # "debugger",
+            # "tester"
         ]
 
         return await self.pipeline.run_pipeline(
