@@ -41,6 +41,18 @@ def init_db() -> None:
             """
         )
 
+        # 🧾 Final run output payload (same structure as exported response JSON)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS run_outputs (
+                run_id TEXT PRIMARY KEY,
+                response_json TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+
         conn.commit()
     finally:
         conn.close()
@@ -63,7 +75,7 @@ def upsert_run(run_id: str, status: str, current_step: str):
                 current_step=excluded.current_step,
                 updated_at=excluded.updated_at
             """,
-            (run_id, status, current_step, now, now)
+            (run_id, status, current_step, now, now),
         )
 
         conn.commit()
@@ -82,12 +94,7 @@ def save_memory_snapshot(run_id: str, step: str, memory: dict):
             INSERT INTO memory_snapshots (run_id, step, memory_json, created_at)
             VALUES (?, ?, ?, ?)
             """,
-            (
-                run_id,
-                step,
-                json.dumps(memory),
-                datetime.utcnow().isoformat()
-            )
+            (run_id, step, json.dumps(memory), datetime.utcnow().isoformat()),
         )
 
         conn.commit()
@@ -101,14 +108,12 @@ def get_run(run_id: str):
     try:
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM runs WHERE run_id = ?",
-            (run_id,)
-        )
+        cursor.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,))
 
         return cursor.fetchone()
     finally:
         conn.close()
+
 
 def get_run_status(run_id: str):
     conn = get_connection()
@@ -116,8 +121,7 @@ def get_run_status(run_id: str):
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT status, current_step FROM runs WHERE run_id = ?",
-            (run_id,)
+            "SELECT status, current_step FROM runs WHERE run_id = ?", (run_id,)
         )
 
         row = cursor.fetchone()
@@ -125,12 +129,10 @@ def get_run_status(run_id: str):
         if not row:
             return None
 
-        return {
-            "status": row[0],
-            "current_step": row[1]
-        }
+        return {"status": row[0], "current_step": row[1]}
     finally:
         conn.close()
+
 
 # 🔍 Fetch memory history
 def get_memory_history(run_id: str):
@@ -145,9 +147,51 @@ def get_memory_history(run_id: str):
             WHERE run_id = ?
             ORDER BY created_at ASC
             """,
-            (run_id,)
+            (run_id,),
         )
 
         return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+# 🧾 Save or update final response payload
+def upsert_run_output(run_id: str, response: dict):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        now = datetime.utcnow().isoformat()
+
+        cursor.execute(
+            """
+            INSERT INTO run_outputs (run_id, response_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                response_json=excluded.response_json,
+                updated_at=excluded.updated_at
+            """,
+            (run_id, json.dumps(response), now, now),
+        )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# 🔍 Fetch final response payload
+def get_run_output(run_id: str):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT response_json FROM run_outputs WHERE run_id = ?", (run_id,)
+        )
+
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        return json.loads(row[0])
     finally:
         conn.close()

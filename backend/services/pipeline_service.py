@@ -3,20 +3,43 @@ from typing import List, Dict, Any
 
 from core.memory import SharedMemory
 from services.agent_service import AgentService, AGENT_REGISTRY
-from core.db import upsert_run, save_memory_snapshot
+from core.db import (
+    upsert_run,
+    save_memory_snapshot,
+    get_memory_history,
+    upsert_run_output,
+)
 
 
 class PipelineService:
-
     def __init__(self):
         self.agent_service = AgentService()
 
+    @staticmethod
+    def _persist_final_output(run_id: str) -> None:
+        history = get_memory_history(run_id)
+
+        formatted = []
+        for step, memory_json, created_at in history:
+            formatted.append(
+                {
+                    "step": step,
+                    "memory": memory_json,
+                    "timestamp": created_at,
+                }
+            )
+
+        upsert_run_output(
+            run_id,
+            {
+                "run_id": run_id,
+                "steps": formatted,
+                "total_steps": len(formatted),
+            },
+        )
+
     async def run_pipeline(
-        self,
-        task: str,
-        scope: str,
-        flow: List[str],
-        memory: SharedMemory = None 
+        self, task: str, scope: str, flow: List[str], memory: SharedMemory = None
     ) -> Dict[str, Any]:
 
         # FIX: use passed memory (CRITICAL for SSE)
@@ -40,19 +63,19 @@ class PipelineService:
 
         # 🔄 Execute pipeline
         for agent in flow:
-
             if agent not in AGENT_REGISTRY:
                 memory.set_status("failed")
 
                 upsert_run(run_id, "failed", agent)
                 save_memory_snapshot(run_id, agent, memory.dump())
+                self._persist_final_output(run_id)
 
                 return {
                     "run_id": run_id,
                     "status": "failed",
                     "error": f"Invalid agent in flow: {agent}",
                     "results": results,
-                    "memory": memory.dump()
+                    "memory": memory.dump(),
                 }
 
             # 🚦 Track step (THIS DRIVES SSE)
@@ -66,7 +89,6 @@ class PipelineService:
             # 🔥 DEVELOPER VALIDATION
             # 🔥 =============================
             if agent == "developer" and result["status"] == "success":
-
                 files_data = memory.read("files")
 
                 if not files_data or "files" not in files_data:
@@ -77,14 +99,22 @@ class PipelineService:
 
                     # 🚨 Too few files → retry
                     if not isinstance(files_list, list) or len(files_list) < 2:
-                        memory.write("developer_last_error", "Insufficient files generated")
+                        memory.write(
+                            "developer_last_error", "Insufficient files generated"
+                        )
 
-                        retry_result = await self.agent_service.run_agent("developer", memory)
+                        retry_result = await self.agent_service.run_agent(
+                            "developer", memory
+                        )
                         results.append(retry_result)
 
                         if retry_result["status"] == "failed":
                             memory.set_status("failed")
                             upsert_run(run_id, "failed", "developer")
+                            save_memory_snapshot(
+                                run_id, "developer_failed", memory.dump()
+                            )
+                            self._persist_final_output(run_id)
 
                             return {
                                 "run_id": run_id,
@@ -94,7 +124,7 @@ class PipelineService:
                                 "traceback": retry_result.get("traceback"),
                                 "results": results,
                                 "memory": memory.dump(),
-                                "duration": round(time.time() - start_time, 2)
+                                "duration": round(time.time() - start_time, 2),
                             }
 
                     # 🧠 Architecture coverage check
@@ -102,16 +132,16 @@ class PipelineService:
                     arch_files = architecture.get("file_structure", [])
 
                     dev_files = [
-                        f.get("filename")
-                        for f in files_list
-                        if isinstance(f, dict)
+                        f.get("filename") for f in files_list if isinstance(f, dict)
                     ]
 
                     if arch_files:
                         coverage = len(set(dev_files) & set(arch_files))
 
                         if coverage < max(1, len(arch_files) // 3):
-                            memory.write("developer_last_error", "Low architecture coverage")
+                            memory.write(
+                                "developer_last_error", "Low architecture coverage"
+                            )
 
             # Save snapshot AFTER execution
             save_memory_snapshot(run_id, agent, memory.dump())
@@ -121,6 +151,8 @@ class PipelineService:
                 memory.set_status("failed")
 
                 upsert_run(run_id, "failed", agent)
+                save_memory_snapshot(run_id, f"{agent}_failed", memory.dump())
+                self._persist_final_output(run_id)
 
                 return {
                     "run_id": run_id,
@@ -130,17 +162,19 @@ class PipelineService:
                     "traceback": result.get("traceback"),
                     "results": results,
                     "memory": memory.dump(),
-                    "duration": round(time.time() - start_time, 2)
+                    "duration": round(time.time() - start_time, 2),
                 }
 
         # ✅ Success
         memory.set_status("completed")
         upsert_run(run_id, "completed", None)
+        save_memory_snapshot(run_id, "final", memory.dump())
+        self._persist_final_output(run_id)
 
         return {
             "run_id": run_id,
             "status": "completed",
             "total_time": round(time.time() - start_time, 2),
             "results": results,
-            "memory": memory.dump()
+            "memory": memory.dump(),
         }

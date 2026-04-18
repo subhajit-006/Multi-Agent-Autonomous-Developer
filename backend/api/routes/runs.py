@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 
 
-from core.db import get_run, get_memory_history
+from core.db import get_run, get_memory_history, get_run_output, upsert_run_output
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -38,14 +38,48 @@ async def get_run_history(run_id: str) -> Dict[str, Any]:
     formatted: List[Dict[str, Any]] = []
 
     for step, memory_json, created_at in history:
-        formatted.append({
-            "step": step,
-            "memory": memory_json,  # still JSON string (safe for now)
-            "timestamp": created_at
-        })
+        formatted.append(
+            {
+                "step": step,
+                "memory": memory_json,  # still JSON string (safe for now)
+                "timestamp": created_at,
+            }
+        )
 
-    return {
+    return {"run_id": run_id, "steps": formatted, "total_steps": len(formatted)}
+
+
+# 🧾 Get final stored response payload
+@router.get("/{run_id}/response")
+async def get_run_response(run_id: str) -> Dict[str, Any]:
+
+    stored = get_run_output(run_id)
+    if stored:
+        return stored
+
+    history = get_memory_history(run_id)
+    if not history:
+        raise HTTPException(
+            status_code=404, detail="No stored response found for this run"
+        )
+
+    formatted: List[Dict[str, Any]] = []
+    for step, memory_json, created_at in history:
+        formatted.append(
+            {
+                "step": step,
+                "memory": memory_json,
+                "timestamp": created_at,
+            }
+        )
+
+    payload = {
         "run_id": run_id,
         "steps": formatted,
-        "total_steps": len(formatted)
+        "total_steps": len(formatted),
     }
+
+    # Backfill for older runs that were created before run_outputs existed.
+    upsert_run_output(run_id, payload)
+
+    return payload
