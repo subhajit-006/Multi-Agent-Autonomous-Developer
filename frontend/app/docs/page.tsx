@@ -12,8 +12,8 @@ const docsItems = [
     body: 'API handler is mounted at /api/auth/[...all]. Configure GitHub OAuth env vars and sign in at /sign-in.',
   },
   {
-    title: 'Live Preview Panel',
-    body: 'Right panel now includes a sandboxed iframe preview for generated frontend snippets where preview is possible.',
+    title: 'Workspace Panels',
+    body: 'The /app workspace now focuses on agent progress, streaming logs, and generated code output in a single right-side code panel.',
   },
 ];
 
@@ -25,7 +25,7 @@ export default function DocsPage() {
         <section className="container max-w-[980px]">
           <h1 className="font-display text-[clamp(30px,5vw,56px)] mb-4">Documentation</h1>
           <p className="text-[var(--text-secondary)] mb-10">
-            Quick reference for MAAD runtime, auth handlers, and live preview features.
+            Quick reference for MAAD runtime, auth handlers, and workspace flow.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">

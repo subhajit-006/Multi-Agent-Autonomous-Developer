@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700&family=Instrument+Sans:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&family=Saira+Stencil+One&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -14,27 +14,34 @@
 
 /* ── Design Tokens ────────────────────────────────────────────── */
 :root {
+  color-scheme: dark;
+
   /* Backgrounds */
-  --bg-primary:    #070b07;
-  --bg-secondary:  #0c150d;
-  --bg-card:       #101d12;
+  --bg-primary:    #111110;
+  --bg-secondary:  #1a1917;
+  --bg-card:       #23201b;
+  --surface:       rgba(34, 30, 25, 0.88);
+  --surface-alt:   rgba(44, 38, 31, 0.78);
 
   /* Accents */
-  --accent:        #D4FF33;
-  --accent-dim:    #A8D61F;
-  --ink-on-accent: #071006;
+  --accent:        #e8a24a;
+  --accent-dim:    #c8842f;
+  --accent-soft:   rgba(146, 179, 98, 0.32);
+  --accent-ink:    #1f1306;
+  --ink-on-accent: #1f1306;
 
   /* Typography */
-  --text-primary:   #ddffd9;
-  --text-secondary: #97d89b;
-  --text-muted:     #4e8152;
+  --text-primary:   #f5eee2;
+  --text-secondary: #d6c8b2;
+  --text-muted:     #9f9078;
 
   /* Borders */
-  --border:        #1f3b22;
-  --border-light:  #2b5730;
+  --border:        #3f382f;
+  --border-light:  #5b5144;
+  --nav-bg:        rgba(17, 17, 16, 0.78);
 
   /* Typography stacks */
-  --font-display: 'Cabinet Grotesk', system-ui, sans-serif;
+  --font-display: 'Saira Stencil One', system-ui, sans-serif;
   --font-body:    'Instrument Sans', system-ui, sans-serif;
 
   /* Spacing scale */
@@ -57,6 +64,30 @@
   --duration-slow: 400ms;
 }
 
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-primary:    #f5f0e6;
+  --bg-secondary:  #ece3d4;
+  --bg-card:       #e4d8c3;
+  --surface:       rgba(255, 250, 242, 0.9);
+  --surface-alt:   rgba(248, 239, 223, 0.85);
+
+  --accent:        #b06d1f;
+  --accent-dim:    #8f5a18;
+  --accent-soft:   rgba(170, 122, 68, 0.22);
+  --accent-ink:    #fffaf2;
+  --ink-on-accent: #fffaf2;
+
+  --text-primary:   #2e2519;
+  --text-secondary: #58462f;
+  --text-muted:     #7c6750;
+
+  --border:        #ccb89a;
+  --border-light:  #b39d7d;
+  --nav-bg:        rgba(245, 240, 230, 0.8);
+}
+
 /* ── Base Reset ───────────────────────────────────────────────── */
 *,
 *::before,
@@ -75,8 +106,8 @@ html {
 
 body {
   background:
-    radial-gradient(900px 420px at 10% -10%, rgba(212, 255, 51, 0.09), transparent 60%),
-    radial-gradient(700px 360px at 90% 0%, rgba(212, 255, 51, 0.07), transparent 58%),
+    radial-gradient(860px 420px at 8% -10%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 63%),
+    radial-gradient(720px 360px at 90% 0%, color-mix(in srgb, var(--accent-dim) 20%, transparent), transparent 59%),
     var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-body);
@@ -88,6 +119,7 @@ body {
   min-height: 100dvh;
   overflow-x: hidden;
   perspective: 1000px;
+  transition: background-color var(--duration-base) var(--ease-out-expo), color var(--duration-base) var(--ease-out-expo);
 }
 
 img,
@@ -285,6 +317,15 @@ button:active {
   }
 }
 
+@keyframes techLoop {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-33.333%);
+  }
+}
+
 /* Skeleton shimmer — slides a highlight over loading placeholders */
 @keyframes shimmer {
   0% {
@@ -348,6 +389,11 @@ button:active {
 
 .animate-ticker {
   animation: ticker 30s linear infinite;
+}
+
+.tech-loop-track {
+  animation: techLoop 22s linear infinite;
+  will-change: transform;
 }
 
 /* Stagger helpers via CSS custom property */

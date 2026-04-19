@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const Nav = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   // Handle scroll effect
   useEffect(() => {
@@ -26,10 +27,27 @@ const Nav = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+    const initial = stored === 'light' || stored === 'dark' ? stored : (prefersLight ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', initial);
+    setTheme(initial as 'light' | 'dark');
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+  };
+
   const navLinks = [
     { name: 'Docs', href: '/docs' },
+    { name: 'Workflow', href: '/#workflow' },
+    { name: 'Agents', href: '/#agents' },
     { name: 'Sign In', href: '/sign-in' },
-    { name: 'GitHub', href: 'https://github.com/maad-dev/maad', external: true },
+    { name: 'GitHub', href: 'https://github.com/subhajit-006/Multi-Agent-Autonomous-Developer', external: true },
   ];
 
   return (
@@ -41,7 +59,7 @@ const Nav = () => {
         scrolled ? 'py-3' : 'py-5'
       }`}
       style={{
-        backgroundColor: 'rgba(10, 10, 10, 0.85)',
+        backgroundColor: 'var(--nav-bg)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         borderColor: 'var(--border)',
@@ -79,6 +97,15 @@ const Nav = () => {
               </Link>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="Toggle light and dark theme"
+            className="inline-flex min-h-[38px] items-center border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)] hover:text-[var(--accent)]"
+          >
+            {theme === 'dark' ? 'Light' : 'Dark'}
+          </button>
 
           <Link href="/app">
             <button
@@ -142,12 +169,22 @@ const Nav = () => {
                   <Link
                     key={link.name}
                     href={link.href}
+                    target={link.external ? '_blank' : undefined}
+                    rel={link.external ? 'noopener noreferrer' : undefined}
                     onClick={() => setIsOpen(false)}
                     className="font-display text-2xl font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                   >
                     {link.name}
                   </Link>
                 ))}
+
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="w-full border border-[var(--border)] bg-[var(--surface)] py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]"
+                >
+                  Switch to {theme === 'dark' ? 'Light' : 'Dark'} Theme
+                </button>
                 
                 <div className="mt-4 pt-8 border-t border-[var(--border)]">
                   <Link href="/app" onClick={() => setIsOpen(false)}>

@@ -14,9 +14,14 @@ export default function SignInPage() {
     setBusy(true);
     setError(null);
     try {
+      const callbackURL =
+        typeof window !== 'undefined'
+          ? `${window.location.origin}/app`
+          : '/app';
+
       await authClient.signIn.social({
         provider: 'github',
-        callbackURL: '/app',
+        callbackURL,
       });
     } catch (e: any) {
       setError(e?.message || 'GitHub sign-in failed. Check your auth env variables.');
@@ -47,7 +52,7 @@ export default function SignInPage() {
           ) : null}
 
           <div className="mt-8 text-[13px] text-[var(--text-muted)]">
-            Required env vars: BETTER_AUTH_URL, BETTER_AUTH_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET.
+            Required env vars: BETTER_AUTH_URL, NEXT_PUBLIC_BETTER_AUTH_URL, BETTER_AUTH_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET.
           </div>
 
           <div className="mt-6">

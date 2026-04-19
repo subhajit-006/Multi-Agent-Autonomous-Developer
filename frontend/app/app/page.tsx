@@ -8,7 +8,6 @@ import Nav from '@/components/Nav';
 import AgentPanel, { AgentPhase, AgentStatus } from '@/components/AgentPanel';
 import LogStream, { LogEntry, LogEntryType } from '@/components/LogStream';
 import CodeOutput, { CodeFile } from '@/components/CodeOutput';
-import LivePreviewPanel from '@/components/LivePreviewPanel';
 import { runPipeline, PipelineEvent } from '@/lib/api';
 import { runMockPipeline } from '@/lib/mockPipeline';
 
@@ -107,6 +106,12 @@ const initialState: AppState = {
   agents: initialAgents,
   logs: [],
   files: [],
+};
+
+const scopeDescriptions: Record<ScopeLevel, string> = {
+  Minimal: 'Fast scaffold',
+  Standard: 'Balanced output',
+  Full: 'Maximum depth',
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -401,27 +406,36 @@ export default function AppPage() {
             </div>
 
             <div className="flex flex-col gap-6 mb-10 w-full">
-              <div className="flex flex-col xl:flex-row xl:items-center gap-4">
-                <span className="font-display font-semibold text-[14px] text-[var(--text-secondary)] uppercase tracking-wider min-w-[60px]">
-                  Scope:
-                </span>
-                <div className="flex flex-row overflow-hidden border border-[var(--border)] bg-[var(--border)]" style={{ borderRadius: 0 }}>
+              <div className="border border-[var(--border)] bg-[var(--bg-card)] p-3 md:p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="font-display font-semibold text-[13px] text-[var(--text-secondary)] uppercase tracking-[0.14em]">
+                    Scope Selection
+                  </span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                    Active: {state.scope}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 border border-[var(--border)] bg-[var(--bg-primary)]">
                   {(['Minimal', 'Standard', 'Full'] as ScopeLevel[]).map((level) => {
                     const isActive = state.scope === level;
                     return (
                       <button
                         key={level}
+                        type="button"
                         disabled={state.appStatus === 'running'}
                         onClick={() => dispatch({ type: 'SET_SCOPE', payload: level })}
                         aria-pressed={isActive}
-                        className={`flex-1 px-2 md:px-4 py-2 min-h-[44px] font-display text-[12px] md:text-[13px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:z-10 relative ${
-                          isActive 
-                            ? 'bg-[var(--accent)] text-[var(--ink-on-accent)] font-bold' 
-                            : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card)]'
+                        className={`group relative min-h-[64px] border-r border-[var(--border)] px-2 py-2.5 text-center transition-colors last:border-r-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:z-10 disabled:opacity-50 ${
+                          isActive
+                            ? 'bg-[var(--accent)] text-[var(--ink-on-accent)]'
+                            : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
                         }`}
-                        style={{ borderRadius: 0 }}
                       >
-                        {level}
+                        <div className="font-display text-[11px] md:text-[12px] font-bold uppercase tracking-[0.12em]">{level}</div>
+                        <div className={`mt-1 font-body text-[10px] md:text-[11px] ${isActive ? 'text-[var(--ink-on-accent)]/85' : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]'}`}>
+                          {scopeDescriptions[level]}
+                        </div>
                       </button>
                     );
                   })}
@@ -491,11 +505,8 @@ export default function AppPage() {
           </div>
 
           <div className="col-span-1 lg:col-span-5 2xl:col-span-6 flex flex-col bg-[var(--bg-secondary)] border-t lg:border-t-0 lg:border-l border-[var(--border)] lg:min-h-[500px]">
-            <div className="flex-1 min-h-[360px]">
+            <div className="flex-1 min-h-[640px]">
               <CodeOutput files={state.files} />
-            </div>
-            <div className="h-[42vh] min-h-[300px]">
-              <LivePreviewPanel files={state.files} />
             </div>
           </div>
 

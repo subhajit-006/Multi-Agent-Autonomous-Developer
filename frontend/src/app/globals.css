@@ -1,6 +1,0 @@
-/*
-  Compatibility global stylesheet.
-  Some generated templates target frontend/src/app/globals.css.
-  Reuse the canonical Next.js global styles from frontend/app/globals.css.
-*/
-@import "../../app/globals.css";

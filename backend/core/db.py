@@ -155,6 +155,42 @@ def get_memory_history(run_id: str):
         conn.close()
 
 
+def get_latest_memory_snapshot(run_id: str):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT step, memory_json, created_at
+            FROM memory_snapshots
+            WHERE run_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (run_id,),
+        )
+
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        step, memory_json, created_at = row
+
+        try:
+            memory = json.loads(memory_json) if memory_json else {}
+        except json.JSONDecodeError:
+            memory = {}
+
+        return {
+            "step": step,
+            "memory": memory,
+            "created_at": created_at,
+        }
+    finally:
+        conn.close()
+
+
 # 🧾 Save or update final response payload
 def upsert_run_output(run_id: str, response: dict):
     conn = get_connection()
