@@ -1,4 +1,7 @@
 {
   "/page": "app/page.js",
-  "/app/page": "app/app/page.js"
+  "/app/page": "app/app/page.js",
+  "/api/pipeline/runs/[runId]/response/route": "app/api/pipeline/runs/[runId]/response/route.js",
+  "/api/pipeline/runs/[runId]/materialize/route": "app/api/pipeline/runs/[runId]/materialize/route.js",
+  "/_not-found/page": "app/_not-found/page.js"
 }

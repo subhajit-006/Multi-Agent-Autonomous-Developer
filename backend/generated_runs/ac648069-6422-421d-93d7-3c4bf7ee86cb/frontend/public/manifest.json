@@ -1,0 +1,16 @@
+{
+  "name": "Minimal Single-File Landing Page",
+  "short_name": "MinimalLP",
+  "description": "A self-contained, lightweight HTML landing page with embedded CSS and JavaScript, optimized for fast loading and simplicity without external dependencies.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

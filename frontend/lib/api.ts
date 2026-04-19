@@ -9,7 +9,6 @@ export interface PipelineEvent {
 interface RunResponse {
   run_id: string;
   status: string;
-  backend_api_url?: string;
 }
 
 interface RunHistoryPayload {
@@ -63,23 +62,6 @@ const extractFilesFromRunResponse = (payload: RunHistoryPayload): Array<{ filena
   return Array.from(seen.values());
 };
 
-const getBackendBaseUrl = (value?: string): string => {
-  if (value) return value.replace(/\/$/, '');
-  if (process.env.NEXT_PUBLIC_BACKEND_API_URL) {
-    return process.env.NEXT_PUBLIC_BACKEND_API_URL.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined') {
-    const url = new URL(window.location.origin);
-    if (url.port === '3000') {
-      url.port = '8000';
-    }
-    return url.origin.replace(/\/$/, '');
-  }
-
-  return 'http://localhost:8000';
-};
-
 export const runPipeline = (task: string, scope: string) => {
   const startUrl = '/api/pipeline';
 
@@ -127,8 +109,7 @@ export const runPipeline = (task: string, scope: string) => {
       }
 
       const runId = runData.run_id;
-      const backendBase = getBackendBaseUrl(runData.backend_api_url);
-      const sseUrl = `${backendBase}/stream/${runId}`;
+      const sseUrl = `/api/pipeline/stream/${runId}`;
       let lastStep: string | null = null;
 
       emit({
@@ -167,20 +148,23 @@ export const runPipeline = (task: string, scope: string) => {
         if (cancelled) return;
 
         const data = parseJsonSafe((event as MessageEvent).data) || {};
+        const runStatus = typeof data.status === 'string' ? data.status.toLowerCase() : 'completed';
         const finalStep = typeof data.step === 'string' ? data.step.toLowerCase() : lastStep;
 
         if (finalStep) {
           emit({
             agent: finalStep,
-            status: 'done',
-            message: `${finalStep} completed.`,
+            status: runStatus === 'failed' ? 'error' : 'done',
+            message: runStatus === 'failed'
+              ? `${finalStep} failed.`
+              : `${finalStep} completed.`,
           });
         }
 
         closeSse();
 
         try {
-          const responseRes = await fetch(`${backendBase}/runs/${runId}/response`, {
+          const responseRes = await fetch(`/api/pipeline/runs/${runId}/response`, {
             signal: controller.signal,
           });
 
@@ -192,32 +176,21 @@ export const runPipeline = (task: string, scope: string) => {
           const payload = (await responseRes.json()) as RunHistoryPayload;
           const files = extractFilesFromRunResponse(payload);
 
-          // Backend currently runs planner+architect+developer by default.
-          // Mark remaining phases as done so UI does not stay stuck in idle.
-          const completedSet = new Set<string>();
-          for (const stepItem of payload.steps || []) {
-            if (typeof stepItem.step === 'string') {
-              const normalized = stepItem.step.toLowerCase();
-              if (DEFAULT_AGENT_ORDER.includes(normalized)) {
-                completedSet.add(normalized);
-              }
-            }
-          }
-
-          for (const agent of DEFAULT_AGENT_ORDER) {
-            if (!completedSet.has(agent)) {
-              emit({
-                agent,
-                status: 'done',
-                message: `${agent} skipped in current backend flow.`,
+          if (runStatus === 'completed' && files.length > 0) {
+            try {
+              await fetch(`/api/pipeline/runs/${runId}/materialize`, {
+                method: 'POST',
+                signal: controller.signal,
               });
+            } catch {
+              // non-blocking; UI still has generated files in memory
             }
           }
 
           emit({
             agent: 'system',
             status: 'pipeline_complete',
-            message: data.status === 'failed' ? 'Pipeline failed.' : 'Pipeline complete.',
+            message: runStatus === 'failed' ? 'Pipeline failed.' : 'Pipeline complete.',
             files,
           });
         } catch (err) {

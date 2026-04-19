@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import List, Dict, Any
 
@@ -14,6 +15,66 @@ from core.db import (
 class PipelineService:
     def __init__(self):
         self.agent_service = AgentService()
+
+    @staticmethod
+    def _prepare_file_structure_for_scope(
+        file_structure: List[str], scope: str
+    ) -> List[str]:
+        if not isinstance(file_structure, list):
+            return []
+
+        # Remove duplicates while preserving order.
+        unique_files = []
+        seen = set()
+        for item in file_structure:
+            if not isinstance(item, str):
+                continue
+            normalized = item.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            unique_files.append(normalized)
+
+        # Skip files that are typically generated externally or binary assets.
+        blocked_suffixes = (
+            ".lock",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".webp",
+            ".ico",
+            ".svg",
+            ".pdf",
+            ".zip",
+        )
+        blocked_names = {
+            "package-lock.json",
+            "pnpm-lock.yaml",
+            "yarn.lock",
+            ".env",
+            ".env.local",
+        }
+
+        filtered = []
+        for path in unique_files:
+            lower = path.lower()
+            name = lower.split("/")[-1]
+            if name in blocked_names:
+                continue
+            if lower.endswith(blocked_suffixes):
+                continue
+            filtered.append(path)
+
+        # Scope-based caps keep generation tractable.
+        scope_caps = {
+            "minimal": 12,
+            "standard": 24,
+            "full": 40,
+        }
+        cap = scope_caps.get((scope or "").lower(), 24)
+
+        return filtered[:cap]
 
     @staticmethod
     def _persist_final_output(run_id: str) -> None:
@@ -61,6 +122,14 @@ class PipelineService:
         results = []
         start_time = time.time()
 
+        agent_timeouts = {
+            "planner": 120,
+            "architect": 180,
+            "developer": 300,
+            "debugger": 180,
+            "tester": 180,
+        }
+
         # 🔄 Execute pipeline
         for agent in flow:
             if agent not in AGENT_REGISTRY:
@@ -82,7 +151,35 @@ class PipelineService:
             memory.set_current_step(agent)
             upsert_run(run_id, "running", agent)
 
-            result = await self.agent_service.run_agent(agent, memory)
+            # Pre-trim architecture before developer to avoid runaway file generation.
+            if agent == "developer":
+                architecture = memory.read("architecture") or {}
+                original_fs = architecture.get("file_structure", [])
+                scoped_fs = self._prepare_file_structure_for_scope(original_fs, scope)
+
+                architecture["file_structure"] = scoped_fs
+                memory.write("architecture", architecture)
+                memory.write("developer_target_file_count", len(scoped_fs))
+
+            try:
+                result = await asyncio.wait_for(
+                    self.agent_service.run_agent(agent, memory),
+                    timeout=agent_timeouts.get(agent, 180),
+                )
+            except asyncio.TimeoutError:
+                memory.write(
+                    f"{agent}_last_error",
+                    f"Agent timed out after {agent_timeouts.get(agent, 180)}s",
+                )
+                result = {
+                    "run_id": run_id,
+                    "agent": agent,
+                    "status": "failed",
+                    "error": f"Agent '{agent}' timed out after {agent_timeouts.get(agent, 180)} seconds",
+                    "traceback": None,
+                    "attempts": 1,
+                }
+
             results.append(result)
 
             # 🔥 =============================

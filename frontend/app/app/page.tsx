@@ -211,11 +211,29 @@ export default function AppPage() {
       (data: PipelineEvent) => {
         if (data.status === 'pipeline_complete') {
           if (data.files && data.files.length > 0) dispatch({ type: 'SET_FILES', payload: data.files });
-          dispatch({ type: 'FINISH_PIPELINE' });
-          dispatch({ 
-            type: 'ADD_LOG', 
-            payload: { timestamp: getTimeString(), agent: 'system', message: 'Pipeline executed successfully.', type: 'success' } 
-          });
+          if ((data.message || '').toLowerCase().includes('failed')) {
+            dispatch({ type: 'ERROR_PIPELINE' });
+            dispatch({
+              type: 'ADD_LOG',
+              payload: {
+                timestamp: getTimeString(),
+                agent: 'system',
+                message: data.message || 'Pipeline failed.',
+                type: 'error'
+              }
+            });
+          } else {
+            dispatch({ type: 'FINISH_PIPELINE' });
+            dispatch({
+              type: 'ADD_LOG',
+              payload: {
+                timestamp: getTimeString(),
+                agent: 'system',
+                message: 'Pipeline executed successfully.',
+                type: 'success'
+              }
+            });
+          }
           return;
         }
 
@@ -361,9 +379,9 @@ export default function AppPage() {
           )}
         </AnimatePresence>
 
-        <div className="w-full max-w-[1920px] px-0 flex-1 grid grid-cols-1 lg:grid-cols-12 2xl:grid-cols-12 auto-rows-min md:border-x border-[var(--border)] relative z-10 shadow-2xl neo-3d-panel">
+        <div className="w-full max-w-[1920px] px-0 flex-1 grid grid-cols-1 lg:grid-cols-12 auto-rows-min md:border-x border-[var(--border)] relative z-10 shadow-2xl neo-3d-panel">
           
-          <div className="col-span-1 lg:col-span-5 2xl:col-span-4 px-4 sm:px-6 md:px-8 py-8 md:py-10 flex flex-col bg-[var(--bg-primary)] lg:border-r border-[var(--border)]">
+          <div className="col-span-1 lg:col-span-3 2xl:col-span-2 px-4 sm:px-5 md:px-6 py-8 md:py-10 flex flex-col bg-[var(--bg-primary)] lg:border-r border-[var(--border)]">
             <h1 className="font-display font-bold text-[clamp(28px,4vw,40px)] text-[var(--text-primary)] leading-[1.1] tracking-tight mb-8">
               What do you want to build?
             </h1>
@@ -463,7 +481,7 @@ export default function AppPage() {
             </div>
           </div>
 
-          <div className="col-span-1 lg:col-span-7 2xl:col-span-4 flex flex-col 2xl:border-r border-[var(--border)] bg-[var(--bg-primary)]">
+          <div className="col-span-1 lg:col-span-4 2xl:col-span-4 flex flex-col lg:border-r border-[var(--border)] bg-[var(--bg-primary)]">
             <div className="flex-1 max-h-[1000px] lg:max-h-full">
               <AgentPanel agents={state.agents} progress={state.progress} elapsedTime={state.elapsedTime} />
             </div>
@@ -472,7 +490,7 @@ export default function AppPage() {
             </div>
           </div>
 
-          <div className="col-span-1 lg:col-span-12 2xl:col-span-4 flex flex-col bg-[var(--bg-secondary)] border-t lg:border-t-0 border-[var(--border)] lg:min-h-[500px]">
+          <div className="col-span-1 lg:col-span-5 2xl:col-span-6 flex flex-col bg-[var(--bg-secondary)] border-t lg:border-t-0 lg:border-l border-[var(--border)] lg:min-h-[500px]">
             <div className="flex-1 min-h-[360px]">
               <CodeOutput files={state.files} />
             </div>
