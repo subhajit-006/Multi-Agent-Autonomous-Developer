@@ -1,0 +1,59 @@
+.display {
+  background-color: var(--display-bg);
+  color: var(--display-text);
+  padding: 1.5rem;
+  text-align: right;
+  font-size: 2.5rem;
+  font-weight: 500;
+  border-radius: var(--calculator) var(--calculator) 0 0;
+  box-shadow: var(--calculator);
+  min-height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.display.error {
+  color: #ff0000;
+}
+
+.buttonGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: var(--calculator-bg);
+  border-radius: 0 0 var(--calculator) var(--calculator);
+  box-shadow: var(--calculator);
+}
+
+.button {
+  padding: 1rem;
+  font-size: 1.5rem;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--button);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--button);
+}
+
+.button:active {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+.digitButton {
+  background-color: var(--button-secondary);
+  color: var(--button-text);
+}
+
+.operatorButton {
+  background-color: var(--button-primary);
+  color: white;
+}
+
+.clearButton {
+  background-color: #ff6b6b;
+  color: white;
+}

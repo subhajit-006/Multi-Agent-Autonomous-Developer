@@ -3,6 +3,7 @@ import re
 import asyncio
 
 from core.llm import get_llm
+from core.file_validation import sanitize_file_structure
 
 
 REQUIRED_KEYS = ["tech_stack", "file_structure", "api_endpoints", "notes"]
@@ -32,6 +33,8 @@ def validate_architecture(data: dict) -> dict:
     # enforce structure
     if not isinstance(validated["file_structure"], list):
         validated["file_structure"] = []
+    else:
+        validated["file_structure"] = sanitize_file_structure(validated["file_structure"])
 
     if not isinstance(validated["api_endpoints"], list):
         validated["api_endpoints"] = []

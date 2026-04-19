@@ -21,7 +21,7 @@ class PipelineRequest(BaseModel):
     task: str = Field(..., description="Plain-English build request")
     scope: Literal["minimal", "standard", "full"] = "standard"
     flow: List[str] = Field(
-        default_factory=lambda: ["planner", "architect", "developer"],
+        default_factory=lambda: ["planner", "architect", "developer", "debugger"],
         description="Ordered agent execution list"
     )
 
@@ -29,7 +29,7 @@ class PipelineRequest(BaseModel):
 # 🧠 Basic dependency validation
 def validate_flow(flow: List[str]):
 
-    disabled_agents = {"debugger", "tester"}
+    disabled_agents = {"tester"}
 
     required_order = {
         "architect": ["planner"],

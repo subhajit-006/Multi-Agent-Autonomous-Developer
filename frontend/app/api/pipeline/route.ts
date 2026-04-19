@@ -33,10 +33,10 @@ export async function POST(request: NextRequest) {
   const requestPayload = {
     task: body.task,
     scope: (body.scope || 'standard').toLowerCase(),
-    // debugger/tester are currently disabled in backend flow validation.
+    // tester is currently disabled in backend flow validation.
     flow: Array.isArray(body.flow) && body.flow.length > 0
       ? body.flow
-      : ['planner', 'architect', 'developer'],
+      : ['planner', 'architect', 'developer', 'debugger'],
   };
 
   let lastNetworkError: string | null = null;

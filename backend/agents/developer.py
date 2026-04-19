@@ -2,6 +2,7 @@ import re
 import asyncio
 
 from core.llm import get_llm
+from core.file_validation import is_valid_filename, sanitize_file_structure
 
 
 # =========================================
@@ -236,8 +237,9 @@ async def run_developer(memory, stream_callback=None) -> dict:
         raise ValueError("Developer agent requires both 'plan' and 'architecture' in memory.")
 
     file_structure = architecture.get("file_structure", [])
-    if not file_structure:
-        raise ValueError("No file_structure found in architecture.")
+    valid_file_structure = sanitize_file_structure(file_structure)
+    if not valid_file_structure:
+        raise ValueError("No valid file paths found in architecture.file_structure.")
 
     generated_files = []   # Final list of { filename, language, content }
     context_so_far  = []   # Grows after each successful generation
@@ -246,7 +248,7 @@ async def run_developer(memory, stream_callback=None) -> dict:
     # 🔁 FILE-BY-FILE GENERATION LOOP
     # =========================================
 
-    for file_path in file_structure:
+    for file_path in valid_file_structure:
 
         if stream_callback:
             await stream_callback("developer_step", f"Generating: {file_path}")
@@ -289,6 +291,9 @@ async def run_developer(memory, stream_callback=None) -> dict:
 
             # Parse using delimiters — immune to JSON escaping issues
             filename, content = parse_code_response(response_text, fallback_path=file_path)
+
+            if not is_valid_filename(filename):
+                raise ValueError(f"Developer generated invalid filename: {filename}")
 
             if content and len(content.strip()) > 20:
                 break  # Valid content received — exit retry loop
@@ -337,9 +342,9 @@ async def run_developer(memory, stream_callback=None) -> dict:
     # 🧠 FINAL VALIDATION
     # =========================================
 
-    if len(generated_files) != len(file_structure):
+    if len(generated_files) != len(valid_file_structure):
         raise ValueError(
-            f"File count mismatch: expected {len(file_structure)}, "
+            f"File count mismatch: expected {len(valid_file_structure)}, "
             f"got {len(generated_files)}"
         )
 

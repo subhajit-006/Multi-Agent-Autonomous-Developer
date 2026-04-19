@@ -13,6 +13,11 @@ interface RunResponse {
 
 interface RunHistoryPayload {
   run_id: string;
+  files?: Array<{
+    filename?: string;
+    language?: string;
+    content?: string;
+  }>;
   steps?: Array<{
     step?: string;
     memory?: string | Record<string, any>;
@@ -22,6 +27,20 @@ interface RunHistoryPayload {
 }
 
 const DEFAULT_AGENT_ORDER = ['planner', 'architect', 'developer', 'debugger', 'tester'];
+
+const normalizeAgentFromStep = (value: unknown): string => {
+  const raw = typeof value === 'string' ? value.toLowerCase().trim() : '';
+  if (!raw) return '';
+
+  if (raw.includes('planner')) return 'planner';
+  if (raw.includes('architect')) return 'architect';
+  if (raw.includes('developer')) return 'developer';
+  if (raw.includes('debugger')) return 'debugger';
+  if (raw.includes('tester')) return 'tester';
+  if (raw.includes('init') || raw.includes('final')) return 'system';
+
+  return raw;
+};
 
 const parseJsonSafe = (value: any) => {
   if (typeof value !== 'string') return value;
@@ -43,6 +62,10 @@ const normalizeFiles = (items: any[]): Array<{ filename: string; language: strin
 };
 
 const extractFilesFromRunResponse = (payload: RunHistoryPayload): Array<{ filename: string; language: string; content: string }> => {
+  if (Array.isArray(payload.files) && payload.files.length > 0) {
+    return normalizeFiles(payload.files);
+  }
+
   const seen = new Map<string, { filename: string; language: string; content: string }>();
 
   for (const step of payload.steps || []) {
@@ -124,7 +147,16 @@ export const runPipeline = (task: string, scope: string) => {
         if (cancelled) return;
 
         const data = parseJsonSafe((event as MessageEvent).data) || {};
-        const step = typeof data.step === 'string' ? data.step.toLowerCase() : '';
+        if (Array.isArray(data.files) && data.files.length > 0) {
+          emit({
+            agent: 'system',
+            status: 'running',
+            message: 'Generated files updated.',
+            files: normalizeFiles(data.files),
+          });
+        }
+
+        const step = normalizeAgentFromStep(data.step);
         if (!step) return;
 
         if (lastStep && lastStep !== step) {
@@ -144,12 +176,27 @@ export const runPipeline = (task: string, scope: string) => {
         });
       });
 
+      eventSource.addEventListener('files', (event) => {
+        if (cancelled) return;
+
+        const data = parseJsonSafe((event as MessageEvent).data) || {};
+        if (!Array.isArray(data.files) || data.files.length === 0) return;
+
+        emit({
+          agent: 'system',
+          status: 'running',
+          message: 'Generated files updated.',
+          files: normalizeFiles(data.files),
+        });
+      });
+
       eventSource.addEventListener('done', async (event) => {
         if (cancelled) return;
 
         const data = parseJsonSafe((event as MessageEvent).data) || {};
         const runStatus = typeof data.status === 'string' ? data.status.toLowerCase() : 'completed';
-        const finalStep = typeof data.step === 'string' ? data.step.toLowerCase() : lastStep;
+        const finalStep = normalizeAgentFromStep(data.step) || lastStep;
+        const filesFromDone = Array.isArray(data.files) ? normalizeFiles(data.files) : [];
 
         if (finalStep) {
           emit({
@@ -175,8 +222,9 @@ export const runPipeline = (task: string, scope: string) => {
 
           const payload = (await responseRes.json()) as RunHistoryPayload;
           const files = extractFilesFromRunResponse(payload);
+          const finalFiles = files.length > 0 ? files : filesFromDone;
 
-          if (runStatus === 'completed' && files.length > 0) {
+          if (runStatus === 'completed' && finalFiles.length > 0) {
             try {
               await fetch(`/api/pipeline/runs/${runId}/materialize`, {
                 method: 'POST',
@@ -191,7 +239,7 @@ export const runPipeline = (task: string, scope: string) => {
             agent: 'system',
             status: 'pipeline_complete',
             message: runStatus === 'failed' ? 'Pipeline failed.' : 'Pipeline complete.',
-            files,
+            files: finalFiles,
           });
         } catch (err) {
           fail(err);

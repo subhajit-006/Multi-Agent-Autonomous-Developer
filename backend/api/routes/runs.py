@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 
 from core.db import get_run, get_memory_history, get_run_output, upsert_run_output
+from core.file_validation import extract_valid_files
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -25,7 +26,8 @@ def _safe_relative_path(filename: str) -> Path:
 
 
 def _extract_files_from_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    files_map: Dict[str, Dict[str, Any]] = {}
+    latest_files: List[Dict[str, str]] = []
+    latest_seen = False
 
     for step in payload.get("steps", []):
         raw_memory = step.get("memory")
@@ -39,29 +41,15 @@ def _extract_files_from_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]
         else:
             memory_obj = {}
 
-        files_container = memory_obj.get("files")
-        if isinstance(files_container, dict):
-            file_list = files_container.get("files", [])
-        elif isinstance(files_container, list):
-            file_list = files_container
-        else:
-            file_list = []
+        if "files" in memory_obj:
+            latest_seen = True
+            candidate = extract_valid_files(memory_obj.get("files"))
+            latest_files = candidate
 
-        if not isinstance(file_list, list):
-            continue
+    if not latest_seen:
+        return []
 
-        for file_obj in file_list:
-            if not isinstance(file_obj, dict):
-                continue
-            filename = file_obj.get("filename") or file_obj.get("name")
-            if not filename:
-                continue
-            files_map[str(filename)] = {
-                "filename": str(filename),
-                "content": file_obj.get("content", ""),
-            }
-
-    return list(files_map.values())
+    return latest_files
 
 
 # 🧠 Get run status
@@ -111,6 +99,7 @@ async def get_run_response(run_id: str) -> Dict[str, Any]:
 
     stored = get_run_output(run_id)
     if stored:
+        stored["files"] = _extract_files_from_payload(stored)
         return stored
 
     history = get_memory_history(run_id)
@@ -134,6 +123,7 @@ async def get_run_response(run_id: str) -> Dict[str, Any]:
         "steps": formatted,
         "total_steps": len(formatted),
     }
+    payload["files"] = _extract_files_from_payload(payload)
 
     # Backfill for older runs that were created before run_outputs existed.
     upsert_run_output(run_id, payload)

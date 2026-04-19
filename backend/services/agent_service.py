@@ -26,12 +26,8 @@ AGENT_REGISTRY: Dict[str, tuple[Callable, str]] = {
 
 
 class AgentService:
-
     async def run_agent(
-        self,
-        agent_name: str,
-        memory: SharedMemory,
-        max_retries: int = 3
+        self, agent_name: str, memory: SharedMemory, max_retries: int = 3
     ) -> Dict[str, Any]:
 
         run_id = memory.read("run_id")
@@ -42,7 +38,7 @@ class AgentService:
                 "agent": agent_name,
                 "status": "failed",
                 "error": f"Invalid agent: {agent_name}",
-                "attempts": 0
+                "attempts": 0,
             }
 
         agent_func, output_key = AGENT_REGISTRY[agent_name]
@@ -51,7 +47,12 @@ class AgentService:
         last_error = None
         last_traceback = None
 
-        logger.info("Agent '%s' started (run_id=%s, max_retries=%s)", agent_name, run_id, max_retries)
+        logger.info(
+            "Agent '%s' started (run_id=%s, max_retries=%s)",
+            agent_name,
+            run_id,
+            max_retries,
+        )
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -66,8 +67,13 @@ class AgentService:
                 if agent_name == "developer":
                     memory.write("developer_attempt", attempt)
                     memory.write("developer_state", "running")
-                    upsert_run(run_id, "running", f"developer:attempt:{attempt}")
-                    logger.info("Developer attempt %s/%s started (run_id=%s)", attempt, max_retries, run_id)
+                    upsert_run(run_id, "running", "developer")
+                    logger.info(
+                        "Developer attempt %s/%s started (run_id=%s)",
+                        attempt,
+                        max_retries,
+                        run_id,
+                    )
 
                 result = await agent_func(memory)
 
@@ -98,7 +104,7 @@ class AgentService:
                     "output_key": output_key,
                     "output": result,
                     "attempts": attempt,
-                    "duration": round(time.time() - start_time, 2)
+                    "duration": round(time.time() - start_time, 2),
                 }
 
             except Exception as e:
@@ -116,12 +122,14 @@ class AgentService:
                 # 🧾 Log failure into memory
                 memory.write(f"{agent_name}_last_error", last_error)
                 memory.write(f"{agent_name}_last_traceback", last_traceback)
-                save_memory_snapshot(run_id, f"{agent_name}_attempt_{attempt}_error", memory.dump())
+                save_memory_snapshot(
+                    run_id, f"{agent_name}_attempt_{attempt}_error", memory.dump()
+                )
 
                 if agent_name == "developer":
                     state = "retrying" if attempt < max_retries else "failed"
                     memory.write("developer_state", state)
-                    upsert_run(run_id, "running", f"developer:{state}:{attempt}")
+                    upsert_run(run_id, "running", "developer")
                     logger.warning(
                         "Developer attempt %s/%s failed (run_id=%s): %s",
                         attempt,
@@ -132,7 +140,12 @@ class AgentService:
 
         # Final failure after retries
         memory.write(output_key, None)
-        logger.error("Agent '%s' failed after %s attempts (run_id=%s)", agent_name, max_retries, run_id)
+        logger.error(
+            "Agent '%s' failed after %s attempts (run_id=%s)",
+            agent_name,
+            max_retries,
+            run_id,
+        )
 
         return {
             "run_id": run_id,
@@ -141,5 +154,5 @@ class AgentService:
             "error": last_error,
             "traceback": last_traceback,
             "attempts": max_retries,
-            "duration": round(time.time() - start_time, 2)
+            "duration": round(time.time() - start_time, 2),
         }

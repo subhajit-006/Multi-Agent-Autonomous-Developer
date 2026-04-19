@@ -1,151 +1,178 @@
 import json
-import os
-from openai import AsyncOpenAI
-from core.config import AGENT_MODELS
+from core.llm import get_llm
+from core.file_validation import is_valid_filename
 
+
+# =========================================
+# 🧠 NORMALIZE FILES
+# =========================================
+def normalize_files(raw_files):
+    valid = []
+
+    for f in raw_files:
+        if not isinstance(f, dict):
+            continue
+
+        name = f.get("filename")
+        content = f.get("content")
+
+        if not is_valid_filename(name) or not isinstance(content, str):
+            continue
+
+        valid.append({
+            "filename": name,
+            "content": content
+        })
+
+    return valid
+
+
+# =========================================
+# 🔍 ANALYZE
+# =========================================
+async def analyze_code(llm, files):
+    prompt = f"""
+You are a senior software architect.
+
+Analyze the codebase and find issues.
+
+Classify into:
+- critical
+- functional
+- minor
+
+Return ONLY JSON:
+
+{{
+  "critical": ["..."],
+  "functional": ["..."],
+  "minor": ["..."]
+}}
+
+Codebase:
+"""
+
+    for f in files:
+        prompt += f"\n--- {f['filename']} ---\n{f['content']}\n"
+
+    response = await llm.ainvoke(prompt)
+
+    try:
+        return json.loads(response.content)
+    except:
+        return {"critical": [], "functional": [], "minor": []}
+
+
+# =========================================
+# 🔧 FIX
+# =========================================
+async def fix_code(llm, files, issues):
+    prompt = f"""
+You are fixing a broken codebase.
+
+ONLY fix critical and functional issues.
+
+Rules:
+- Return ONLY changed files
+- Do NOT rewrite everything
+- Keep structure intact
+
+Return JSON:
+
+{{
+  "corrected_files": [
+    {{ "path": "...", "content": "..." }}
+  ]
+}}
+
+Issues:
+{json.dumps(issues, indent=2)}
+
+Codebase:
+"""
+
+    for f in files:
+        prompt += f"\n--- {f['filename']} ---\n{f['content']}\n"
+
+    response = await llm.ainvoke(prompt)
+
+    try:
+        return json.loads(response.content)
+    except:
+        return {"corrected_files": []}
+
+
+# =========================================
+# 🚀 MAIN DEBUGGER
+# =========================================
 async def run_debugger(memory) -> dict:
-    client = AsyncOpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ.get("OPENROUTER_API_KEY")
-    )
-    developed_data = memory.read("files")
-    
-    if not developed_data or "files" not in developed_data:
-        # Nothing to debug, pass through
-        return {"issues_found": 0, "fixes": [], "corrected_files": []}
 
-    raw_code_files = developed_data.get("files")
-    if not isinstance(raw_code_files, list):
-        return {"issues_found": 0, "fixes": [], "corrected_files": []}
+    llm = get_llm("debugger", streaming=False)  # ← uses Mistral
 
-    # Normalize generated files to avoid crashes on malformed entries.
-    code_files = []
-    for item in raw_code_files:
-        if not isinstance(item, dict):
-            continue
-        filename = item.get("filename")
-        content = item.get("content")
-        if not isinstance(filename, str) or not isinstance(content, str):
-            continue
-        language = item.get("language")
-        if not isinstance(language, str):
-            language = filename.split(".")[-1] if "." in filename else "txt"
-        code_files.append({"filename": filename, "language": language, "content": content})
+    data = memory.read("files")
 
-    if not code_files:
-        return {"issues_found": 0, "fixes": [], "corrected_files": []}
+    if not data or "files" not in data:
+        return {"issues_found": 0, "corrected_files": []}
 
-    system_prompt = "You are an expert code reviewer and debugger. Review this code for bugs, missing imports, type errors, and security issues."
-    
-    user_content = "Generated Files:\n"
-    for f in code_files:
-        user_content += f"\n--- {f['filename']} ---\n{f['content']}\n"
-        
-    user_content += "\nIdentify issues. Output corrected files if fixes were applied."
+    raw_files = data.get("files")
 
-    response = await client.chat.completions.create(
-        model=AGENT_MODELS.get("debugger"),
-        max_tokens=8192,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content}
-        ],
-        tools=[{
-            "type": "function",
-            "function": {
-                "name": "submit_review",
-                "description": "Submit the debug report and corrected files.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "issues_found": {"type": "integer"},
-                        "fixes": {"type": "array", "items": {"type": "string"}},
-                        "corrected_files": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "path": {"type": "string"},
-                                    "content": {"type": "string"}
-                                },
-                                "required": ["path", "content"]
-                            }
-                        }
-                    },
-                    "required": ["issues_found", "fixes", "corrected_files"]
-                }
-            }
-        }],
-        tool_choice={"type": "function", "function": {"name": "submit_review"}}
-    )
+    files = normalize_files(raw_files)
 
-    tool_calls = []
-    if response and response.choices and response.choices[0].message:
-        tool_calls = response.choices[0].message.tool_calls or []
+    if not files:
+        return {"issues_found": 0, "corrected_files": []}
 
-    if tool_calls:
-        for tool_call in tool_calls:
-            if tool_call.function.name == "submit_review":
-                raw_arguments = tool_call.function.arguments
-                try:
-                    review = json.loads(raw_arguments) if raw_arguments else {}
-                except json.JSONDecodeError:
-                    review = {}
+    # =========================================
+    # 🔍 ANALYZE
+    # =========================================
+    issues = await analyze_code(llm, files)
 
-                if not isinstance(review, dict):
-                    review = {}
+    total = sum(len(issues.get(k, [])) for k in ["critical", "functional", "minor"])
 
-                issues_found = review.get("issues_found", 0)
-                if not isinstance(issues_found, int):
-                    issues_found = 0
+    # =========================================
+    # 🔧 FIX (only if needed)
+    # =========================================
+    if not issues.get("critical") and not issues.get("functional"):
+        return {
+            "issues_found": total,
+            "corrected_files": []
+        }
 
-                fixes = review.get("fixes", [])
-                if not isinstance(fixes, list):
-                    fixes = []
+    fix_result = await fix_code(llm, files, issues)
 
-                corrected_files = review.get("corrected_files", [])
-                if not isinstance(corrected_files, list):
-                    corrected_files = []
+    corrected = fix_result.get("corrected_files", [])
 
-                review = {
-                    "issues_found": issues_found,
-                    "fixes": fixes,
-                    "corrected_files": corrected_files,
-                }
-                
-                # If fixes happened, overwrite original memory state for files to pass to tester
-                if review.get("issues_found", 0) > 0 and review.get("corrected_files"):
-                    corrected_map = {}
-                    for cf in review["corrected_files"]:
-                        if not isinstance(cf, dict):
-                            continue
-                        path = cf.get("path")
-                        content = cf.get("content")
-                        if isinstance(path, str) and isinstance(content, str):
-                            corrected_map[path] = {"path": path, "content": content}
-                    
-                    new_files_list = []
-                    for original_file in code_files:
-                        path = original_file.get("filename")
-                        if not isinstance(path, str):
-                            continue
-                        if path in corrected_map:
-                            new_files_list.append({
-                                "filename": path,
-                                "language": original_file.get("language", "txt"),
-                                "content": corrected_map[path]["content"]
-                            })
-                        else:
-                            new_files_list.append(original_file)
-                    
-                    # Write back the corrected codebase
-                    memory.write("files", {"files": new_files_list})
-                    
-                return review
+    if not corrected:
+        return {
+            "issues_found": total,
+            "corrected_files": []
+        }
 
-    # Fail-soft behavior: keep pipeline moving when model returns plain text/no tool call.
+    # =========================================
+    # 🔄 APPLY PATCH
+    # =========================================
+    patch_map = {
+        f["path"]: f["content"]
+        for f in corrected
+        if isinstance(f, dict)
+    }
+
+    new_files = []
+
+    for f in files:
+        name = f["filename"]
+
+        if name in patch_map:
+            new_files.append({
+                "filename": name,
+                "content": patch_map[name]
+            })
+        else:
+            new_files.append(f)
+
+    memory.write("files", {"files": new_files})
+
     return {
-        "issues_found": 0,
-        "fixes": ["Debugger returned no valid tool output; skipped automated corrections."],
-        "corrected_files": []
+        "issues_found": total,
+        "fixes": issues,
+        "corrected_files": corrected
     }

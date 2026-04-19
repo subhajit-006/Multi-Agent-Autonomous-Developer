@@ -14,7 +14,7 @@ class Orchestrator:
             "planner",
             "architect",
             "developer",
-            # "debugger",
+            "debugger",
             # "tester"
         ]
 
