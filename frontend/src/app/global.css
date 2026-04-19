@@ -1,0 +1,2 @@
+/* Backward-compatible alias for templates importing ./global.css */
+@import "./globals.css";

@@ -15,6 +15,21 @@ import Link from 'next/link';
  * - Sharp design language (no rounded corners)
  */
 const HeroSection = () => {
+  const techStack = [
+    'React',
+    'Next.js',
+    'TypeScript',
+    'Tailwind CSS',
+    'Framer Motion',
+    'FastAPI',
+    'Python',
+    'SQLite',
+    'OpenRouter',
+    'LangChain',
+    'Docker',
+    'GitHub Actions',
+  ];
+
   // Animation Variants
   const fadeUp = {
     initial: { opacity: 0, y: 24 },
@@ -143,12 +158,12 @@ const HeroSection = () => {
           custom={0.55}
           className="font-mono text-[12px] text-[var(--text-muted)] tracking-[0.1em] uppercase"
         >
-          Built with Claude · Orchestrated by n8n · Open Source
+          Built with Simple Prompt · Powered by Agents · Open Source
         </motion.div>
       </div>
 
       {/* ── Bottom Stats Line ───────────────────────────────────── */}
-      <div className="relative w-full z-10 px-4 md:px-6 container mt-8 md:mt-12 lg:mt-0 lg:absolute lg:bottom-12 lg:left-0">
+      <div className="relative w-full p-4">
         <motion.div
           initial={{ opacity: 0, scaleX: 0 }}
           animate={{ opacity: 1, scaleX: 1 }}
@@ -159,13 +174,39 @@ const HeroSection = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.8 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-y-3 gap-x-6 text-[12px] md:text-[13px] text-[var(--text-muted)]"
+          className="grid grid-cols-2 md:grid-cols-4 gap-y-3 gap-x-6 text-[12px] md:text-[13px] text-[var(--text-muted)] ml-32"
         >
           {['5 Agents', 'Real-time Pipeline', 'Auto-debugged', 'GitHub Push'].map((stat) => (
             <span key={stat} className="font-body uppercase tracking-wider text-center md:text-left">
               {stat}
             </span>
           ))}
+        </motion.div>
+
+        {/* ── Moving Tech Stack Strip ───────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.95, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-10 w-full overflow-hidden border-y border-[var(--border)] bg-[var(--bg-secondary)]"
+        >
+          <motion.div
+            className="flex w-max items-center py-3"
+            animate={{ x: ['0%', '-50%'] }}
+            transition={{ duration: 24, ease: 'linear', repeat: Infinity }}
+          >
+            {[...techStack, ...techStack].map((item, idx) => (
+              <div
+                key={`${item}-${idx}`}
+                className="mx-2 flex items-center gap-2 border border-[var(--border-light)] px-3 py-1"
+              >
+                <span className="h-1.5 w-1.5 bg-[var(--accent)]" aria-hidden="true" />
+                <span className="font-mono text-[20px] uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                  {item}
+                </span>
+              </div>
+            ))}
+          </motion.div>
         </motion.div>
       </div>
     </section>
